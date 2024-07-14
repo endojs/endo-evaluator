@@ -2,16 +2,17 @@ import { LitElement, html, css } from 'lit';
 import { createRef, ref } from 'lit/directives/ref.js';
 
 import { consoleLines } from './safe-render.js';
+import { sloppyAsyncEval } from './evaluators.js';
 
-const just = x => JSON.stringify(x, null, 2);
+const { freeze } = Object;
+const just = x => String(x);
 const harden = x => {
-  Object.freeze(x);
+  freeze(x);
   return x;
 };
 
 class EndoRepl extends LitElement {
   static properties = {
-    header: { type: String },
     history: { type: Array },
   };
 
@@ -22,68 +23,22 @@ class EndoRepl extends LitElement {
       box-sizing: border-box;
     }
 
+    :host {
+      height: 100%;
+      width: 100%;
+    }
+
+    .repl {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      overflow-y: auto;
+    }
+
     h1 {
       text-align: center;
       margin-top: 40px;
-    }
-
-    .container {
-      display: flex;
-      flex-direction: column;
-      padding: 10px;
-      height: 100%;
-      overflow-y: auto;
-    }
-
-    .ui {
-      display: flex;
-      flex-direction: row;
-      flex-wrap: wrap;
-      align-items: stretch;
-      height: 100%;
-      justify-content: space-between;
-    }
-
-    .left {
-      flex-grow: 1;
-      flex-shrink: 0;
-      padding: 10px;
-    }
-
-    .frame {
-      display: none;
-      min-height: 50%;
-      min-width: 600px;
-      margin: 0px;
-      padding: 0px;
-      overflow-y: auto;
-    }
-
-    .right {
-      width: 600px;
-      flex-grow: 1;
-      flex-shrink: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: stretch;
-      overflow-y: auto;
-      padding: 10px;
-    }
-
-    .updated {
-      animation-name: spin;
-      animation-duration: 2000ms;
-      animation-iteration-count: 1;
-    }
-
-    @keyframes spin {
-      from {
-        transform: rotate(0deg);
-      }
-
-      to {
-        transform: rotate(360deg);
-      }
     }
 
     .help {
@@ -167,49 +122,20 @@ class EndoRepl extends LitElement {
       background: #428f87;
       border-radius: 4px;
     }
-
-    * {
-      padding: 0;
-      margin: 0;
-      box-sizing: border-box;
-    }
-    main {
-      flex-grow: 1;
-    }
-
-    .logo {
-      margin-top: 36px;
-      animation: app-logo-spin infinite 20s linear;
-    }
-
-    @keyframes app-logo-spin {
-      from {
-        transform: rotate(0deg);
-      }
-      to {
-        transform: rotate(360deg);
-      }
-    }
-
-    .app-footer {
-      font-size: calc(12px + 0.5vmin);
-      align-items: center;
-    }
-
-    .app-footer a {
-      margin-left: 5px;
-    }
   `;
 
   constructor() {
     super();
-    this.header = 'My app';
     this.history = [];
   }
+
+  endowments = {};
 
   #nextHistNum = 0;
 
   #inputHistoryNum = 0;
+
+  #results = [];
 
   #refs = {};
 
@@ -244,22 +170,28 @@ class EndoRepl extends LitElement {
   #setNextHistNum(max = 0) {
     const thisHistNum = this.#nextHistNum;
     this.#nextHistNum = Math.max(thisHistNum, max);
-    this.#inputHistoryNum = thisHistNum;
+    this.#inputHistoryNum = this.#nextHistNum;
     return thisHistNum;
   }
 
   /**
    * @param {number} histnum
    * @param {string} command
+   * @param {string} display
    * @param {any} result
    * @param {{ command?: string, display?: string }} [consoles]
    */
-  #updateHistory(histnum, command, result, consoles = {}) {
+  #updateHistory(histnum, command, display, result, consoles = {}) {
     const h = this.#deref('history');
     const isScrolledToBottom =
       h.scrollHeight - h.clientHeight <= h.scrollTop + 1;
 
-    const ent = harden({ command, result, consoles: harden(consoles) });
+    this.#results[histnum] = result;
+    const ent = harden({
+      command,
+      display,
+      consoles: harden(consoles),
+    });
     this.history = harden([
       ...this.history.slice(0, histnum),
       ent,
@@ -276,37 +208,30 @@ class EndoRepl extends LitElement {
   #submitEval() {
     const input = /** @type {HTMLInputElement} */ (this.#deref('input'));
     const command = input.value;
-    console.debug('submitEval', command);
+    // console.debug('submitEval', command);
     const number = this.#setNextHistNum(this.#nextHistNum + 1);
-    this.#updateHistory(number, command, `sending for eval...`);
-    input.value = '';
 
-    this.#updateHistory(number, command, `evaluating...`);
-    const updateResult = ({ display }) =>
-      this.#updateHistory(number, command, display);
-    Promise.resolve(this.#unsafeEval(command)).then(updateResult, updateResult);
-  }
-
-  // eslint-disable-next-line class-methods-use-this
-  async #unsafeEval(command) {
-    try {
-      if (typeof command !== 'string') {
-        throw Error(`command must be a string`);
-      }
-
-      // eslint-disable-next-line no-eval
-      const ret = await (0, eval)(
-        `async (command) => { return (${command}\n) }`,
-      )(
-        this.history.map(({ command: cmd }) => cmd),
-        this.history.map(({ result }) => result),
+    const fulfilled = value =>
+      this.#updateHistory(number, command, just(value), value);
+    const rejected = err =>
+      this.#updateHistory(
+        number,
+        command,
+        `Promise.reject(${just(err)})`,
+        Promise.reject(err),
       );
-      return { display: just(ret) };
-    } catch (err) {
-      return {
-        display: `Promise.reject(${just((err && err.message) || err)})`,
-      };
-    }
+
+    // Don't deep freeze the results, because we want to be able to
+    // update it and modify individual entries.
+    const endowments = freeze({
+      history: freeze([...this.#results]),
+      ...this.endowments,
+    });
+
+    input.value = '';
+    const retP = sloppyAsyncEval(command, endowments);
+    this.#updateHistory(number, command, `Promise.resolve(<pending>)`, retP);
+    retP.then(fulfilled, rejected);
   }
 
   #inputKeyup(ev) {
@@ -356,72 +281,62 @@ class EndoRepl extends LitElement {
 
   render() {
     return html`
-      <div class="container">
-        <main class="ui">
-          <div class="right">
-            <div class="help">
-              Use <code>home</code> to see useful objects, and
-              <code>history[N]</code> to refer to result history
+      <div class="repl">
+        <slot name="help">
+          <div class="help">
+            Welcome to the Evaluator! Use <code>history[N]</code> to refer to
+            result history.
+          </div>
+        </slot>
+        <div id="history" ${this.#mkref('history')} class="history">
+          ${this.history.map(({ command, display, consoles }, histnum) =>
+            [
+              {
+                kind: 'command',
+                display: command,
+                msgs: consoles.command || '',
+              },
+              {
+                kind: 'history',
+                display,
+                msgs: consoles.display || '',
+              },
+            ].map(
+              ({ kind, display: disp, msgs }) =>
+                html`<div class="${kind}-line">
+                    <div>${kind}[${histnum}]</div>
+                    <div .innerHTML=${consoleLines(disp)}></div>
+                  </div>
+                  <div class="msg-line">
+                    <div></div>
+                    <div .innerHTML=${consoleLines(msgs)}></div>
+                  </div>`,
+            ),
+          )}
+        </div>
+        <div class="history">
+          <div id="command-entry" class="command-line">
+            <div>command[${this.#inputHistoryNum}]</div>
+            <div>
+              <input
+                id="input"
+                ${this.#mkref('input')}
+                @keyup="${this.#inputKeyup}"
+                tabindex="0"
+                type="text"
+              />
             </div>
-            <div id="history" ${this.#mkref('history')} class="history"></div>
-            <div class="history">
-              ${this.history.map(({ command, result, consoles }, histnum) =>
-                [
-                  {
-                    kind: 'command',
-                    display: command,
-                    msgs: consoles.command || '',
-                  },
-                  {
-                    kind: 'history',
-                    display: result,
-                    msgs: consoles.display || '',
-                  },
-                ].map(
-                  ({ kind, display, msgs }) =>
-                    html`<div class="${kind}-line">
-                        <div>${kind}[${histnum}]</div>
-                        <div .innerHTML=${consoleLines(display)}></div>
-                      </div>
-                      <div class="msg-line">
-                        <div></div>
-                        <div .innerHTML=${consoleLines(msgs)}></div>
-                      </div>`,
-                ),
-              )}
-              <div id="command-entry" class="command-line">
-                <div>command[${this.#inputHistoryNum}]</div>
-                <div>
-                  <input
-                    id="input"
-                    ${this.#mkref('input')}
-                    @keyup="${this.#inputKeyup}"
-                    tabindex="0"
-                    type="text"
-                  />
-                </div>
-                <div>
-                  <input
-                    id="go"
-                    @click="${this.#submitEval}"
-                    tabindex="0"
-                    type="submit"
-                    value="eval"
-                  />
-                </div>
-              </div>
+            <div>
+              <input
+                id="go"
+                @click="${this.#submitEval}"
+                tabindex="0"
+                type="submit"
+                value="eval"
+              />
             </div>
           </div>
-        </main>
-        <address>
-          Source:
-          <a
-            target="_blank"
-            href="https://github.com/endojs/endo/packages/repl/"
-            id="package_repo"
-            ><span id="package_name">endo-repl</span></a
-          >
-        </address>
+        </div>
       </div>
     `;
   }

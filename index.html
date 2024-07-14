@@ -1,34 +1,98 @@
 <!doctype html>
 <html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <meta name="Description" content="The Endo read-eval-print-loop (REPL)." />
+    <base href="/" />
 
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="Description" content="The Endo read-eval-print-loop (REPL).">
-  <base href="/">
+    <title>Agoric :: REPL Demo</title>
+    <style>
+      html,
+      body {
+        height: 100%;
+      }
 
-  <title>Agoric :: REPL Demo</title>
-  <style>
-    html, body {
-      height: 100%;
-    }
+      * {
+        padding: 0;
+        margin: 0;
+        box-sizing: border-box;
+      }
 
-    html, body {
-      padding: 0;
-      margin: 0;
-      box-sizing: border-box;
-    }
-  </style>
-  <title>Endo :: REPL (Read-Eval-Print-Loop)</title>
-</head>
+      .container {
+        display: flex;
+        flex-direction: column;
+        padding: 10px;
+        height: 100%;
+        overflow-y: auto;
+      }
 
-<body>
-  <noscript>
-    You need to enable JavaScript to run this app.</noscript>
+      .ui {
+        display: flex;
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: stretch;
+        height: 100%;
+        justify-content: space-between;
+      }
 
-  <endo-repl></endo-repl>
+      main {
+        flex-grow: 1;
+      }
 
-  <script type="module" src="./src/endo-repl.js"></script>
-</body>
+      .left {
+        flex-grow: 1;
+        flex-shrink: 0;
+        padding: 10px;
+      }
 
+      .right {
+        width: 600px;
+        flex-grow: 1;
+        flex-shrink: 1;
+      }
+    </style>
+    <title>Endo :: REPL (Read-Eval-Print-Loop)</title>
+  </head>
+
+  <body>
+    <noscript> You need to enable JavaScript to run this app.</noscript>
+
+    <div class="container">
+      <main class="left">
+        <endo-repl id="o-repl">
+          <div class="help" slot="help">
+            Use <code>O.help</code> to see detailed help, and
+            <code>history[N]</code> to refer to result history
+          </div>
+        </endo-repl>
+        <address>
+          Source:
+          <a
+            target="_blank"
+            href="https://github.com/endojs/endo/packages/repl/"
+            id="package_repo"
+            ><span id="package_name">endo-repl</span></a
+          >
+        </address>
+      </main>
+    </div>
+
+    <script type="module" src="./src/endo-repl.js"></script>
+    <script type="module">
+      const help = `\
+Sorry, we don't have any better help than this right now.`;
+      const O = Object.freeze(
+        Object.assign(x => x, {
+          help: Promise.resolve(help),
+        }),
+      );
+      document.getElementById('o-repl').endowments = {
+        O,
+      };
+    </script>
+  </body>
 </html>
