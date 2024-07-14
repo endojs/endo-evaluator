@@ -1,0 +1,59 @@
+{
+  "name": "endo-repl",
+  "description": "Webcomponent endo-repl following open-wc recommendations",
+  "license": "MIT",
+  "author": "endo-repl",
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "lint": "eslint --ext .js,.html . --ignore-path .gitignore && prettier \"**/*.js\" --check --ignore-path .gitignore",
+    "format": "eslint --ext .js,.html . --fix --ignore-path .gitignore && prettier \"**/*.js\" --write --ignore-path .gitignore",
+    "prepare": "husky",
+    "build": "rimraf dist && rollup -c rollup.config.js && npm run analyze -- --exclude dist",
+    "start:build": "web-dev-server --root-dir dist --app-index index.html --open",
+    "analyze": "cem analyze --litelement",
+    "start": "web-dev-server"
+  },
+  "dependencies": {
+    "lit": "^3.1.4"
+  },
+  "devDependencies": {
+    "@custom-elements-manifest/analyzer": "^0.10.3",
+    "@open-wc/eslint-config": "^12.0.3",
+    "@rollup/plugin-babel": "^6.0.4",
+    "@rollup/plugin-node-resolve": "^15.2.3",
+    "@web/dev-server": "^0.4.6",
+    "@web/rollup-plugin-html": "^2.3.0",
+    "@web/rollup-plugin-import-meta-assets": "^2.2.1",
+    "babel-plugin-template-html-minifier": "^4.1.0",
+    "deepmerge": "^4.3.1",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.1.0",
+    "husky": "^9.0.11",
+    "lint-staged": "^15.2.7",
+    "prettier": "^3.3.2",
+    "rimraf": "^5.0.9",
+    "rollup": "^4.18.1",
+    "rollup-plugin-esbuild": "^6.1.1",
+    "rollup-plugin-workbox": "^8.1.0"
+  },
+  "eslintConfig": {
+    "extends": [
+      "@open-wc",
+      "prettier"
+    ]
+  },
+  "prettier": {
+    "singleQuote": true,
+    "arrowParens": "avoid"
+  },
+  "lint-staged": {
+    "*.js-nope": [
+      "eslint --fix"
+    ],
+    "*.js": [
+      "prettier --write"
+    ]
+  },
+  "customElements": "custom-elements.json"
+}
