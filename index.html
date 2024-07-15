@@ -6,10 +6,13 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     />
-    <meta name="Description" content="The Endo read-eval-print-loop (REPL)." />
+    <meta
+      name="Description"
+      content="The Endo async read-eval-print-loop (REPL)."
+    />
     <base href="/" />
 
-    <title>Agoric :: REPL Demo</title>
+    <title>Endo Evaluator</title>
     <style>
       html,
       body {
@@ -54,8 +57,13 @@
         flex-grow: 1;
         flex-shrink: 1;
       }
+
+      main:has(> endo-evaluator:not(:defined)) {
+        /* outline: 1px solid red; */
+        display: none;
+      }
     </style>
-    <title>Endo :: REPL (Read-Eval-Print-Loop)</title>
+    <title>Endo Evaluator</title>
   </head>
 
   <body>
@@ -63,36 +71,56 @@
 
     <div class="container">
       <main class="left">
-        <endo-repl id="o-repl">
-          <div class="help" slot="help">
-            Use <code>O.help</code> to see detailed help, and
-            <code>history[N]</code> to refer to result history
-          </div>
-        </endo-repl>
+        <endo-evaluator id="o-repl">
+          <span slot="hint">
+            Use <code>O.help</code> for additional hints.
+          </span>
+        </endo-evaluator>
         <address>
           Source:
           <a
             target="_blank"
-            href="https://github.com/endojs/endo/packages/repl/"
+            href="https://github.com/endojs/endo-evaluator/"
             id="package_repo"
-            ><span id="package_name">endo-repl</span></a
+            ><span id="package_name">@endo/evaluator</span></a
           >
         </address>
       </main>
     </div>
 
-    <script type="module" src="./src/endo-repl.js"></script>
     <script type="module">
+      // Hardened JS.
+      import '@endo/init/pre-remoting.js'; // Uncomment for Hardened JS.
+      // import './src/noses.js'; // Uncomment for no Hardened JS.
+      import { harden } from './src/maybe-lockdown.js';
+      import './src/endo-evaluator.js';
+
+      // eslint-disable-next-line import/order
+      import { makeMarshal, decodeToJustin } from '@endo/marshal';
+
       const help = `\
-Sorry, we don't have any better help than this right now.`;
+O.noes! We don't have any better help than this right now.`;
       const O = Object.freeze(
         Object.assign(x => x, {
           help: Promise.resolve(help),
+          noes: Promise.reject(Error('O NOES!!!')),
         }),
       );
-      document.getElementById('o-repl').endowments = {
-        O,
+      O.noes.catch(() => {});
+
+      const { toCapData } = makeMarshal(undefined, undefined, {
+        marshalName: 'Justin render',
+      });
+      const just = x => {
+        harden(x);
+        const { body, slots } = toCapData(x);
+        const str = decodeToJustin(JSON.parse(body), true, slots);
+        return str;
       };
+
+      const repl = document.getElementById('o-repl');
+      repl.endowments = { O };
+      repl.just = just;
     </script>
   </body>
 </html>

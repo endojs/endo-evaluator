@@ -1,19 +1,15 @@
 import { LitElement, html, css } from 'lit';
 import { createRef, ref } from 'lit/directives/ref.js';
 
-import { consoleLines } from './safe-render.js';
-import { sloppyAsyncEval } from './evaluators.js';
+import { consoleLines, harden } from './safe-render.js';
+import defaultEvaluatorMakerName, * as evaluatorMakers from './evaluators.js';
 
 const { freeze } = Object;
-const just = x => String(x);
-const harden = x => {
-  freeze(x);
-  return x;
-};
 
-class EndoRepl extends LitElement {
+class EndoEvaluator extends LitElement {
   static properties = {
     history: { type: Array },
+    evaluator: {},
   };
 
   static styles = css`
@@ -126,7 +122,9 @@ class EndoRepl extends LitElement {
 
   constructor() {
     super();
+    this.just = x => String(x);
     this.history = [];
+    this.evaluator = defaultEvaluatorMakerName;
   }
 
   endowments = {};
@@ -138,6 +136,22 @@ class EndoRepl extends LitElement {
   #results = [];
 
   #refs = {};
+
+  #evaluate = null;
+
+  #evaluatorName = null;
+
+  set evaluator(val) {
+    if (!evaluatorMakers[val]) {
+      throw Error(`evaluator maker ${val} not found`);
+    }
+    this.#evaluatorName = val;
+    this.#evaluate = evaluatorMakers[val]();
+  }
+
+  get evaluator() {
+    return this.#evaluatorName;
+  }
 
   /**
    * @param {string} name
@@ -212,12 +226,12 @@ class EndoRepl extends LitElement {
     const number = this.#setNextHistNum(this.#nextHistNum + 1);
 
     const fulfilled = value =>
-      this.#updateHistory(number, command, just(value), value);
+      this.#updateHistory(number, command, this.just(value), value);
     const rejected = err =>
       this.#updateHistory(
         number,
         command,
-        `Promise.reject(${just(err)})`,
+        `Promise.reject(${this.just(err)})`,
         Promise.reject(err),
       );
 
@@ -225,11 +239,12 @@ class EndoRepl extends LitElement {
     // update it and modify individual entries.
     const endowments = freeze({
       history: freeze([...this.#results]),
+      it: this.#results.at(-1),
       ...this.endowments,
     });
 
     input.value = '';
-    const retP = sloppyAsyncEval(command, endowments);
+    const retP = this.#evaluate(command, endowments);
     this.#updateHistory(number, command, `Promise.resolve(<pending>)`, retP);
     retP.then(fulfilled, rejected);
   }
@@ -282,12 +297,13 @@ class EndoRepl extends LitElement {
   render() {
     return html`
       <div class="repl">
-        <slot name="help">
-          <div class="help">
-            Welcome to the Evaluator! Use <code>history[N]</code> to refer to
-            result history.
-          </div>
-        </slot>
+        <div class="help">
+          <slot name="help">
+            Welcome to the Evaluator! Use <code>it</code> for the prior result
+            (or <code>history[N]</code> for any other result).
+            <slot name="hint"></slot>
+          </slot>
+        </div>
         <div id="history" ${this.#mkref('history')} class="history">
           ${this.history.map(({ command, display, consoles }, histnum) =>
             [
@@ -342,4 +358,4 @@ class EndoRepl extends LitElement {
   }
 }
 
-customElements.define('endo-repl', EndoRepl);
+customElements.define('endo-evaluator', EndoEvaluator);

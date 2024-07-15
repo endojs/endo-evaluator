@@ -1,8 +1,8 @@
 {
-  "name": "endo-repl",
-  "description": "Webcomponent endo-repl following open-wc recommendations",
+  "name": "@endo/evaluator",
+  "description": "Webcomponent endo-evaluator following open-wc recommendations",
   "license": "MIT",
-  "author": "endo-repl",
+  "author": "@endo/evaluator",
   "version": "0.0.0",
   "type": "module",
   "scripts": {
@@ -15,8 +15,11 @@
     "start": "web-dev-server"
   },
   "dependencies": {
+    "@endo/init": "^1.1.2",
+    "@endo/marshal": "^1.5.0",
     "@open-wc/dev-server-hmr": "^0.2.0",
-    "lit": "^3.1.4"
+    "lit": "^3.1.4",
+    "ses": "^1.5.0"
   },
   "devDependencies": {
     "@custom-elements-manifest/analyzer": "^0.10.3",
@@ -39,8 +42,15 @@
     "rollup-plugin-esbuild": "^6.1.1",
     "rollup-plugin-workbox": "^8.1.0"
   },
+  "resolutions": {
+    "strip-ansi": "6.0.1"
+  },
   "eslintConfig": {
     "root": true,
+    "ignorePatterns": [
+      "node_modules",
+      "dist"
+    ],
     "extends": [
       "@open-wc",
       "prettier"
@@ -51,10 +61,8 @@
     "arrowParens": "avoid"
   },
   "lint-staged": {
-    "*.js-nope": [
-      "eslint --fix"
-    ],
     "*.js": [
+      "eslint --fix",
       "prettier --write"
     ]
   },

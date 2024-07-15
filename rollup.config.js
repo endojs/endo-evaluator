@@ -28,8 +28,9 @@ export default {
     nodeResolve(),
     /** Minify JS, compile JS to a lower language target */
     esbuild({
-      minify: true,
-      target: ['chrome64', 'firefox67', 'safari11.1'],
+      minify: false,
+      // exclude: ['@endo/init'],
+      target: 'es2021', // ['chrome64', 'firefox67', 'safari11.1'],
     }),
     /** Bundle assets references via import.meta.url */
     importMetaAssets(),
@@ -39,7 +40,9 @@ export default {
         [
           'babel-plugin-template-html-minifier',
           {
-            modules: { lit: ['html', { name: 'css', encapsulation: 'style' }] },
+            modules: {
+              lit: ['html', { name: 'css', encapsulation: 'style' }],
+            },
             failOnError: false,
             strictCSS: true,
             htmlMinifier: {
