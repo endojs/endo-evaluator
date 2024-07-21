@@ -102,7 +102,8 @@ class EndoEvaluator extends LitElement {
     }
 
     /* For command entry and eval button. */
-    input {
+    input,
+    textarea {
       font-family: 'Roboto Mono', monospace;
       font-size: 14px;
       width: 100%;
@@ -235,13 +236,12 @@ class EndoEvaluator extends LitElement {
         Promise.reject(err),
       );
 
-    // Don't deep freeze the results, because we want to be able to
-    // update it and modify individual entries.
-    const endowments = freeze({
-      history: freeze([...this.#results]),
-      it: this.#results.at(-1),
+    const endowments = {
+      ...Object.fromEntries(this.#results.map((r, i) => [`$${i}`, r])),
+      $_: this.#results.at(-1),
+      cmd: freeze(this.history.map(({ command: c }) => c)),
       ...this.endowments,
-    });
+    };
 
     input.value = '';
     const retP = this.#evaluate(command, endowments);
@@ -251,31 +251,36 @@ class EndoEvaluator extends LitElement {
 
   #inputKeyup(ev) {
     switch (ev.key) {
-      case 'Enter':
+      case 'Enter': {
         this.#submitEval();
         return false;
+      }
 
-      case 'ArrowUp':
+      case 'ArrowUp': {
         this.#inputHistory(-1);
         return false;
+      }
 
-      case 'ArrowDown':
+      case 'ArrowDown': {
         this.#inputHistory(+1);
         return false;
+      }
 
-      case 'p':
+      case 'p': {
         if (ev.ctrlKey) {
           this.#inputHistory(-1);
           return false;
         }
         break;
+      }
 
-      case 'n':
+      case 'n': {
         if (ev.ctrlKey) {
           this.#inputHistory(+1);
           return false;
         }
         break;
+      }
 
       // Do the standard behaviour.
       default:
@@ -299,8 +304,9 @@ class EndoEvaluator extends LitElement {
       <div class="repl">
         <div class="help">
           <slot name="help">
-            Welcome to the Evaluator! Use <code>it</code> for the prior result
-            (or <code>history[N]</code> for any other result).
+            Welcome to the Evaluator! Use <code>$_</code> for the prior result
+            (or <code>$N</code> for any other result by its entry number
+            <code>N</code>).
             <slot name="hint"></slot>
           </slot>
         </div>
@@ -320,7 +326,11 @@ class EndoEvaluator extends LitElement {
             ].map(
               ({ kind, display: disp, msgs }) =>
                 html`<div class="${kind}-line">
-                    <div>${kind}[${histnum}]</div>
+                    <div>
+                      ${kind === 'history'
+                        ? `$${histnum} =`
+                        : `cmd[${histnum}]>`}
+                    </div>
                     <div .innerHTML=${consoleLines(disp)}></div>
                   </div>
                   <div class="msg-line">
@@ -332,7 +342,7 @@ class EndoEvaluator extends LitElement {
         </div>
         <div class="history">
           <div id="command-entry" class="command-line">
-            <div>command[${this.#inputHistoryNum}]</div>
+            <div>cmd[${this.#inputHistoryNum}]&gt;</div>
             <div>
               <input
                 id="input"
