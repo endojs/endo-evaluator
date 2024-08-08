@@ -1,4 +1,5 @@
 import { hmrPlugin, presets } from '@open-wc/dev-server-hmr';
+import { importMapsPlugin } from '@web/dev-server-import-maps';
 
 /** Use Hot Module replacement by adding --hmr to the start command */
 const hmr = process.argv.includes('--hmr');
@@ -24,6 +25,7 @@ export default /** @type {import('@web/dev-server').DevServerConfig} */ ({
         exclude: ['**/*/node_modules/**/*'],
         presets: [presets.litElement],
       }),
+    importMapsPlugin(),
   ],
 
   // See documentation for all available options
