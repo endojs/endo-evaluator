@@ -4,8 +4,6 @@ import { createRef, ref } from 'lit/directives/ref.js';
 import { consoleLines, harden } from './safe-render.js';
 import defaultEvaluatorMakerName, * as evaluatorMakers from './evaluators.js';
 
-const { freeze } = Object;
-
 class EndoEvaluator extends LitElement {
   static properties = {
     history: { type: Array },
@@ -236,17 +234,32 @@ class EndoEvaluator extends LitElement {
         Promise.reject(err),
       );
 
+    const results = Object.create(null);
+    const nresults = this.#results.length;
+    for (let i = 0; i < nresults; i += 1) {
+      const r = this.#results[i];
+      results[i] = r;
+      results[i - nresults] = r;
+    }
+
+    const cmd = Object.create(null);
+    const ncmds = this.history.length;
+    for (let i = 0; i < ncmds; i += 1) {
+      const c = this.history[i].command;
+      cmd[i] = c;
+      cmd[i - ncmds] = c;
+    }
+
     const endowments = {
-      ...Object.fromEntries(this.#results.map((r, i) => [`$${i}`, r])),
-      $_: this.#results.at(-1),
-      cmd: freeze(this.history.map(({ command: c }) => c)),
+      $: harden(results),
+      cmd: harden(cmd),
       ...this.endowments,
     };
 
     input.value = '';
     const retP = this.#evaluate(command, endowments);
     this.#updateHistory(number, command, `Promise.resolve(<pending>)`, retP);
-    retP.then(fulfilled, rejected);
+    retP.then(fulfilled, rejected).catch(rejected);
   }
 
   #inputKeyup(ev) {
@@ -304,9 +317,9 @@ class EndoEvaluator extends LitElement {
       <div class="repl">
         <div class="help">
           <slot name="help">
-            Welcome to the Evaluator! Use <code>$_</code> for the prior result
-            (or <code>$N</code> for any other result by its entry number
-            <code>N</code>).
+            Welcome to the Evaluator! Use <code>$[-1]</code> for the prior
+            result (or <code>$[N]</code> for any other result by its entry
+            number <code>N</code>).
             <slot name="hint"></slot>
           </slot>
         </div>
@@ -328,7 +341,7 @@ class EndoEvaluator extends LitElement {
                 html`<div class="${kind}-line">
                     <div>
                       ${kind === 'history'
-                        ? `$${histnum} =`
+                        ? `$[${histnum - this.history.length}] =`
                         : `cmd[${histnum}]>`}
                     </div>
                     <div .innerHTML=${consoleLines(disp)}></div>

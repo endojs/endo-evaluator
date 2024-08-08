@@ -1,7 +1,63 @@
-const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
+/* eslint-disable no-console */
+/* eslint-disable no-new-func */
+/**
+ * @param {string} body
+ * @param {string} prefix
+ * @param {(code: string) => void} checkSyntax
+ * @param {string} [head]
+ */
+const createFunctionCode = (
+  body,
+  prefix,
+  checkSyntax,
+  head = 'async () => ',
+) => {
+  if (typeof body !== 'string')
+    throw TypeError('function body must be a string');
 
-const makeUnsafeAsyncEval =
-  (directives = '') =>
+  const check = code => {
+    // console.log('checking code syntax:', code);
+    checkSyntax(code);
+  };
+
+  // Validate that the prefix is a statement.
+  const naivePrefixCode = `${head}{${prefix};`;
+  const naiveSuffixCode = `}`;
+  const verifiedPrefixCode = `${head}{{${prefix};`;
+  const verifiedSuffixCode = `}}`;
+  check(naivePrefixCode + naiveSuffixCode);
+  check(verifiedPrefixCode + verifiedSuffixCode);
+
+  try {
+    // See if the body is an expression first.
+    const naiveExprCode = `${verifiedPrefixCode}return (${body}\n);${verifiedSuffixCode}`;
+    const verifiedExprCode = `${verifiedPrefixCode}return ((${body}\n));${verifiedSuffixCode}`;
+    check(naiveExprCode);
+    check(verifiedExprCode);
+    return verifiedExprCode;
+  } catch (e) {
+    if (e instanceof SyntaxError) {
+      try {
+        // Evaluate statements instead.
+        const naiveStmtCode = `${naivePrefixCode}${body}\n${naiveSuffixCode}`;
+        const verifiedStmtCode = `${verifiedPrefixCode}${body}\n${verifiedSuffixCode}`;
+        check(naiveStmtCode);
+        check(verifiedStmtCode);
+        return verifiedStmtCode;
+      } catch (e2) {
+        if (e2 instanceof SyntaxError) {
+          throw e;
+        }
+        throw e2;
+      }
+    } else {
+      throw e;
+    }
+  }
+};
+
+const makeUnsafeEval =
+  (asyncKeyword, directives = '') =>
   async (command, endowments = {}) => {
     if (typeof command !== 'string') {
       throw Error(`command must be a string`);
@@ -10,33 +66,30 @@ const makeUnsafeAsyncEval =
     const destructureEndowments = `{ ${Object.keys(endowments).join(', ')} }`;
     const prefix = `${directives}const ${destructureEndowments} = _endowments;`;
 
-    let afn;
-    try {
-      // Try an expression first.
-      afn = new AsyncFunction('_endowments', `${prefix}return (${command}\n)`);
-    } catch (e) {
-      if (e instanceof SyntaxError) {
-        try {
-          // Evaluate statements instead.
-          afn = new AsyncFunction('_endowments', `${prefix}${command}`);
-        } catch (e2) {
-          if (e2 instanceof SyntaxError) {
-            throw e;
-          }
-          throw e2;
-        }
-      } else {
-        throw e;
-      }
-    }
+    const verifiedCode = createFunctionCode(
+      command,
+      prefix,
+      code => {
+        // Syntax check only (no evaluation).
+        Function(code);
+      },
+      `${asyncKeyword} (_endowments) => `,
+    );
 
+    // eslint-disable-next-line no-eval
+    const afn = (0, eval)(verifiedCode);
     return afn(endowments);
   };
 
-export const unsafeSloppyAsyncEval = () => makeUnsafeAsyncEval();
-export const unsafeStrictAsyncEval = () => makeUnsafeAsyncEval(`'use strict';`);
+export const unsafeSloppyAsyncEval = () => makeUnsafeEval('async ');
+export const unsafeStrictAsyncEval = () =>
+  makeUnsafeEval('async ', `'use strict';`);
 
-const makeCompartmentEvaluate = options => {
+/**
+ * @param {Record<string, any>} options
+ * @param {string} [asyncKeyword]
+ */
+const makeCompartmentEvaluate = (options, asyncKeyword) => {
   // eslint-disable-next-line no-undef
   const compartment = new Compartment();
 
@@ -50,37 +103,28 @@ const makeCompartmentEvaluate = options => {
       Object.getOwnPropertyDescriptors(endowments),
     );
 
-    let afn;
-    try {
-      // Try an expression first.
-      afn = compartment.evaluate(`async () => (${command}\n)`, options);
-    } catch (e) {
-      if (e instanceof SyntaxError) {
-        try {
-          // Evaluate statements instead.
-          afn = compartment.evaluate(`async () => { ${command}\n}`, options);
-        } catch (e2) {
-          if (e2 instanceof SyntaxError) {
-            throw e;
-          }
-          throw e2;
-        }
-      } else {
-        throw e;
-      }
-    }
-
-    return afn();
+    const verifiedCode = createFunctionCode(
+      command,
+      '',
+      code => {
+        // Syntax check only (no evaluation).
+        compartment.globalThis.Function(code);
+      },
+      `${asyncKeyword}(_endowments) => `,
+    );
+    const afn = compartment.evaluate(verifiedCode, options);
+    return afn(endowments);
   };
 };
 
-export const strictCompartmentEvaluate = () => makeCompartmentEvaluate();
-export const sloppyCompartmentEvaluate = () =>
-  makeCompartmentEvaluate({ sloppyGlobalsMode: true });
+export const strictCompartmentAsyncEvaluate = () =>
+  makeCompartmentEvaluate(undefined, 'async ');
+export const sloppyCompartmentAsyncEvaluate = () =>
+  makeCompartmentEvaluate({ sloppyGlobalsMode: true }, 'async ');
 
 export const detectBestEvaluator = (...args) => {
   const prioritizedEvaluators = {
-    sloppyCompartmentEvaluate,
+    sloppyCompartmentAsyncEvaluate,
     unsafeSloppyAsyncEval,
   };
   for (const [name, evaluator] of Object.entries(prioritizedEvaluators)) {
