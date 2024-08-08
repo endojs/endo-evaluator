@@ -3,7 +3,7 @@
   "description": "Webcomponent endo-evaluator following open-wc recommendations",
   "license": "MIT",
   "author": "@endo/evaluator",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "lint": "eslint --ext .js,.html . --ignore-path .gitignore && prettier \"**/*.js\" --check --ignore-path .gitignore",
@@ -27,6 +27,7 @@
     "@rollup/plugin-babel": "^6.0.4",
     "@rollup/plugin-node-resolve": "^15.2.3",
     "@web/dev-server": "^0.4.6",
+    "@web/dev-server-import-maps": "^0.2.1",
     "@web/rollup-plugin-html": "^2.3.0",
     "@web/rollup-plugin-import-meta-assets": "^2.2.1",
     "babel-plugin-template-html-minifier": "^4.1.0",
