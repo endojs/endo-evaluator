@@ -71,7 +71,7 @@
 
     <div class="container">
       <main class="left">
-        <endo-evaluator evaluator="unsafeSloppyAsyncEval" id="o-repl">
+        <endo-evaluator id="o-repl">
           <span slot="hint">
             Use <code>O.help</code> for additional hints.
           </span>
@@ -95,6 +95,7 @@
         }
       }
     </script>
+
     <script type="module">
       // Hardened JS.
       import '@endo/init/pre-remoting.js'; // Uncomment for Hardened JS.
@@ -103,9 +104,7 @@
       import { harden } from './src/maybe-lockdown.js';
       import { prepareOTools } from '@endo/o';
       import './src/endo-evaluator.js';
-
-      // eslint-disable-next-line import/order
-      import { makeMarshal, decodeToJustin } from '@endo/marshal';
+      import inspect from './src/object-inspect.js';
 
       const help = `\
 O.noes! We don't have any better help than this right now.`;
@@ -116,32 +115,27 @@ O.noes! We don't have any better help than this right now.`;
         help,
         noes,
       });
-      // eslint-disable-next-line no-undef
-      globalThis.O = O;
 
-      const valToId = new WeakMap();
-      let lastId = 0;
-      const convertValToSlot = val => {
-        if (valToId.has(val)) {
-          return valToId.get(val);
-        }
-        lastId += 1;
-        const id = lastId;
-        valToId.set(val, id);
-        return id;
-      };
-      const { toCapData } = makeMarshal(convertValToSlot, {
-        marshalName: 'Justin render',
-      });
-      const just = x => {
-        harden(x);
-        const { body, slots } = toCapData(x);
-        const str = decodeToJustin(JSON.parse(body), true, slots);
-        return str;
-      };
-
+      // Construct a powerful import function.
+      const $imprt = harden(
+        Object.assign(
+          {
+            import(mod) {
+              return import(mod);
+            },
+          }.import,
+          {
+            meta: import.meta,
+          },
+        ),
+      );
       const repl = document.getElementById('o-repl');
-      repl.endowments = { O };
+      repl.endowments = {
+        O,
+        $imprt,
+      };
+
+      const just = x => inspect(x);
       repl.just = just;
     </script>
   </body>

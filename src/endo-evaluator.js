@@ -136,7 +136,7 @@ class EndoEvaluator extends LitElement {
 
   #refs = {};
 
-  #evaluate = null;
+  evaluate = null;
 
   #evaluatorName = null;
 
@@ -145,7 +145,6 @@ class EndoEvaluator extends LitElement {
       throw Error(`evaluator maker ${val} not found`);
     }
     this.#evaluatorName = val;
-    this.#evaluate = evaluatorMakers[val]();
   }
 
   get evaluator() {
@@ -171,12 +170,9 @@ class EndoEvaluator extends LitElement {
     /** @type {{ value?: Element }} */
     const refCell = this.#refs[name];
     if (!refCell) {
-      throw Error(`deref(${name}) failed: ref cell is not set`);
+      return undefined;
     }
     const { value } = refCell;
-    if (!value) {
-      throw Error(`deref(${name}) failed: ref.value is unset`);
-    }
     return value;
   }
 
@@ -187,6 +183,36 @@ class EndoEvaluator extends LitElement {
     return thisHistNum;
   }
 
+  #makeInlineConsole(number) {
+    const sendToConsole = (...args) => {
+      const {
+        consoles: { display: cdisplay = '', ...restConsoles } = {},
+        command,
+        display,
+      } = this.history[number] || {};
+
+      let msgs = cdisplay;
+      if (msgs) {
+        msgs += '\n';
+      }
+      msgs += args
+        .map(o => (typeof o === 'string' ? o : this.just(o)))
+        .join(' ');
+
+      this.#updateHistory(number, command, display, this.#results[number], {
+        ...restConsoles,
+        display: msgs,
+      });
+    };
+    const inlineConsole = Object.fromEntries(
+      ['debug', 'log', 'info', 'warn', 'error'].map(severity => [
+        severity,
+        sendToConsole,
+      ]),
+    );
+    return inlineConsole;
+  }
+
   /**
    * @param {number} histnum
    * @param {string} command
@@ -194,16 +220,16 @@ class EndoEvaluator extends LitElement {
    * @param {any} result
    * @param {{ command?: string, display?: string }} [consoles]
    */
-  #updateHistory(histnum, command, display, result, consoles = {}) {
+  #updateHistory(histnum, command, display, result, consoles = null) {
     const h = this.#deref('history');
     const isScrolledToBottom =
-      h.scrollHeight - h.clientHeight <= h.scrollTop + 1;
+      h && h.scrollHeight - h.clientHeight <= h.scrollTop + 1;
 
     this.#results[histnum] = result;
     const ent = harden({
       command,
       display,
-      consoles: harden(consoles),
+      consoles: harden(consoles) || this.history[histnum]?.consoles,
     });
     this.history = harden([
       ...this.history.slice(0, histnum),
@@ -234,30 +260,33 @@ class EndoEvaluator extends LitElement {
         Promise.reject(err),
       );
 
-    const results = Object.create(null);
-    const nresults = this.#results.length;
-    for (let i = 0; i < nresults; i += 1) {
-      const r = this.#results[i];
-      results[i] = r;
-      results[i - nresults] = r;
-    }
-
     const cmd = Object.create(null);
     const ncmds = this.history.length;
     for (let i = 0; i < ncmds; i += 1) {
       const c = this.history[i].command;
       cmd[i] = c;
-      cmd[i - ncmds] = c;
+    }
+
+    const results = Object.create(null);
+    const nresults = this.#results.length;
+    for (let i = 0; i < nresults; i += 1) {
+      const r = this.#results[i];
+      results[i] = r;
     }
 
     const endowments = {
-      $: harden(results),
+      $: Object.seal(results),
+      $_: this.#results.at(-1),
       cmd: harden(cmd),
+      console: this.#makeInlineConsole(number),
       ...this.endowments,
     };
 
+    if (this.evaluate == null) {
+      this.evaluate = evaluatorMakers[this.#evaluatorName]();
+    }
     input.value = '';
-    const retP = this.#evaluate(command, endowments);
+    const retP = this.evaluate(command, endowments);
     this.#updateHistory(number, command, `Promise.resolve(<pending>)`, retP);
     retP.then(fulfilled, rejected).catch(rejected);
   }
@@ -317,9 +346,9 @@ class EndoEvaluator extends LitElement {
       <div class="repl">
         <div class="help">
           <slot name="help">
-            Welcome to the Evaluator! Use <code>$[-1]</code> for the prior
-            result (or <code>$[N]</code> for any other result by its entry
-            number <code>N</code>).
+            Welcome to the Evaluator! Use <code>$_</code> for the prior result
+            (or <code>$[N]</code> for any other result by its entry number
+            <code>N</code>).
             <slot name="hint"></slot>
           </slot>
         </div>
@@ -329,19 +358,19 @@ class EndoEvaluator extends LitElement {
               {
                 kind: 'command',
                 display: command,
-                msgs: consoles.command || '',
+                msgs: consoles?.command || '',
               },
               {
                 kind: 'history',
                 display,
-                msgs: consoles.display || '',
+                msgs: consoles?.display || '',
               },
             ].map(
               ({ kind, display: disp, msgs }) =>
                 html`<div class="${kind}-line">
                     <div>
                       ${kind === 'history'
-                        ? `$[${histnum - this.history.length}] =`
+                        ? `$[${histnum}] =`
                         : `cmd[${histnum}]>`}
                     </div>
                     <div .innerHTML=${consoleLines(disp)}></div>
