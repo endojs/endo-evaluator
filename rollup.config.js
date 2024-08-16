@@ -1,3 +1,4 @@
+/* eslint-disable no-use-before-define */
 import nodeResolve from '@rollup/plugin-node-resolve';
 import babel from '@rollup/plugin-babel';
 import { rollupPluginHTML as html } from '@web/rollup-plugin-html';
@@ -23,9 +24,23 @@ export default {
       minify: true,
       injectServiceWorker: true,
       serviceWorkerPath: 'dist/sw.js',
+      transformHtml: [
+        source =>
+          source.replace(
+            /<script type=(["']?)importmap\1.*?>(\n?.*?)*?<\/script>/g,
+            '',
+          ),
+      ],
     }),
     /** Resolve bare module imports */
-    nodeResolve(),
+    nodeResolveWithImportmap({
+      importmap: {
+        imports: {
+          '@endo/o': './src/endo-o.js',
+        },
+      },
+      nodeResolver: nodeResolve(),
+    }),
     /** Minify JS, compile JS to a lower language target */
     esbuild({
       minify: false,
@@ -72,3 +87,36 @@ export default {
     }),
   ],
 };
+
+/**
+ * @param {object} options
+ * @param {{imports: Record<string, string>}} options.importmap
+ * @param {ReturnType<import('@rollup/plugin-node-resolve').default>} options.nodeResolver
+ */
+function nodeResolveWithImportmap({ importmap, nodeResolver } = {}) {
+  const handlerProxy = new Proxy(nodeResolver.resolveId.handler, {
+    apply: (target, thisArg, handlerArguments) =>
+      typeof importmap?.imports?.[handlerArguments[0]] === 'string'
+        ? importmap.imports[handlerArguments[0]]
+        : Reflect.apply(target, thisArg, handlerArguments),
+  });
+
+  const resolveIdProxy = new Proxy(nodeResolver.resolveId, {
+    get: (target, prop, receiver) =>
+      prop === 'handler' ? handlerProxy : Reflect.get(target, prop, receiver),
+  });
+
+  const nodeResolveOverrides = {
+    name: 'node-resolve-with-importmap',
+    resolveId: resolveIdProxy,
+  };
+
+  return new Proxy(nodeResolver, {
+    has: (target, prop) =>
+      prop in nodeResolveOverrides || Reflect.has(target, prop),
+    get: (target, prop, receiver) =>
+      prop in nodeResolveOverrides
+        ? nodeResolveOverrides[prop]
+        : Reflect.get(target, prop, receiver),
+  });
+}
