@@ -244,12 +244,47 @@ class EndoEvaluator extends LitElement {
     }
   }
 
-  #submitEval() {
+  async #submitEval() {
     const input = /** @type {HTMLInputElement} */ (this.#deref('input'));
     const command = input.value;
+    input.value = '';
     // console.debug('submitEval', command);
     const number = this.#setNextHistNum(this.#nextHistNum + 1);
 
+    this.#updateHistory(number, command, `Promise.resolve(<pending>)`, null);
+
+    // Run the rest of this function in a future turn to avoid blocking the event handlers.
+    await null;
+    const retP = new Promise(resolve => {
+      const cmd = Object.create(null);
+      const ncmds = this.history.length;
+      for (let i = 0; i < ncmds; i += 1) {
+        const c = this.history[i].command;
+        cmd[i] = c;
+      }
+
+      const results = Object.create(null);
+      const nresults = this.#results.length;
+      for (let i = 0; i < nresults; i += 1) {
+        const r = this.#results[i];
+        results[i] = r;
+      }
+
+      const endowments = {
+        $: Object.seal(results),
+        $_: this.#results.at(-1),
+        cmd: harden(cmd),
+        console: this.#makeInlineConsole(number),
+        ...this.endowments,
+      };
+
+      if (this.evaluate == null) {
+        this.evaluate = evaluatorMakers[this.#evaluatorName]();
+      }
+      resolve(this.evaluate(command, endowments));
+    });
+
+    this.#updateHistory(number, command, `Promise.resolve(<pending>)`, retP);
     const fulfilled = value =>
       this.#updateHistory(number, command, this.just(value), value);
     const rejected = err =>
@@ -259,58 +294,36 @@ class EndoEvaluator extends LitElement {
         `Promise.reject(${this.just(err)})`,
         Promise.reject(err),
       );
-
-    const cmd = Object.create(null);
-    const ncmds = this.history.length;
-    for (let i = 0; i < ncmds; i += 1) {
-      const c = this.history[i].command;
-      cmd[i] = c;
-    }
-
-    const results = Object.create(null);
-    const nresults = this.#results.length;
-    for (let i = 0; i < nresults; i += 1) {
-      const r = this.#results[i];
-      results[i] = r;
-    }
-
-    const endowments = {
-      $: Object.seal(results),
-      $_: this.#results.at(-1),
-      cmd: harden(cmd),
-      console: this.#makeInlineConsole(number),
-      ...this.endowments,
-    };
-
-    if (this.evaluate == null) {
-      this.evaluate = evaluatorMakers[this.#evaluatorName]();
-    }
-    input.value = '';
-    const retP = this.evaluate(command, endowments);
-    this.#updateHistory(number, command, `Promise.resolve(<pending>)`, retP);
     retP.then(fulfilled, rejected).catch(rejected);
   }
 
+  /**
+   * @param {KeyboardEvent} ev
+   */
   #inputKeyup(ev) {
     switch (ev.key) {
       case 'Enter': {
         this.#submitEval();
+        ev.preventDefault();
         return false;
       }
 
       case 'ArrowUp': {
         this.#inputHistory(-1);
+        ev.preventDefault();
         return false;
       }
 
       case 'ArrowDown': {
         this.#inputHistory(+1);
+        ev.preventDefault();
         return false;
       }
 
       case 'p': {
         if (ev.ctrlKey) {
           this.#inputHistory(-1);
+          ev.preventDefault();
           return false;
         }
         break;
@@ -319,6 +332,7 @@ class EndoEvaluator extends LitElement {
       case 'n': {
         if (ev.ctrlKey) {
           this.#inputHistory(+1);
+          ev.preventDefault();
           return false;
         }
         break;

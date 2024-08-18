@@ -140,19 +140,8 @@ export const prepareOTools = (
 
     const tgt = makeTarget(getThisArg, promiseMethodEntries);
 
-    const spaceName = boundName ? ` ${JSON.stringify(String(boundName))}` : '';
     const cell = new Proxy(tgt, {
-      apply(_target, thisArg, args) {
-        if (thisArg !== parentCell) {
-          return when(
-            Promise.reject(
-              TypeError(
-                `Cannot apply method${spaceName} to different this-binding`,
-              ),
-            ),
-          );
-        }
-
+      apply(_target, _thisArg, args) {
         if (boundName === undefined) {
           const retP = hpApplyFunction(boundThis, args);
           return makeBoundOCell(retP, cell);
@@ -162,21 +151,21 @@ export const prepareOTools = (
         return makeBoundOCell(retP, cell);
       },
       deleteProperty(target, key) {
-        if (promiseMethodEntries.some(([m]) => m === key)) {
+        if (promiseMethods.includes(key)) {
           return false;
         }
         hpDelete(getThisArg(), key).catch(sink);
         return Reflect.deleteProperty(target, key);
       },
       set(target, key, value) {
-        if (promiseMethodEntries.some(([m]) => m === key)) {
+        if (promiseMethods.includes(key)) {
           return false;
         }
         hpSet(getThisArg(), key, value).catch(sink);
         return Reflect.set(target, key, value);
       },
       get(_target, key) {
-        if (typeof key === 'string' && promiseMethods.includes(key)) {
+        if (promiseMethods.includes(key)) {
           // Base case, escape the cell via a promise method.
           return tgt[key];
         }

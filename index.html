@@ -106,8 +106,30 @@
       import './src/endo-evaluator.js';
       import inspect from './src/object-inspect.js';
 
-      const help = `\
-O.noes! We don't have any better help than this right now.`;
+      const ask = question =>
+        // eslint-disable-next-line no-alert, no-restricted-globals
+        confirm(question);
+
+      const details = String.raw;
+      const assertPermission = (action, ...deets) => {
+        if (typeof action !== 'string') {
+          throw Error(`Expected action to be a string, not ${typeof action}`);
+        }
+
+        const permit = ask(
+          `Permission requested for ${JSON.stringify(action)}${deets.length ? ` with:\n\n${deets.join('\n')}` : '?'}
+
+WARNING: Granting permission for this request can cause security vulnerabilities and system corruption.
+
+Are you sure you want to proceed?`,
+        );
+
+        if (permit === true) {
+          return;
+        }
+        throw Error(`Permission denied`);
+      };
+      const help = `O.noes! We don't have any better help than this right now.`;
       const noes = Promise.reject(Error('O NOES!!!'));
       noes.catch(() => {});
       const { makeO } = prepareOTools(null);
@@ -117,22 +139,48 @@ O.noes! We don't have any better help than this right now.`;
       });
 
       // Construct a powerful import function.
-      const $imprt = harden(
+      const unsafeImport = m => import(m);
+      const gatedUnsafeImport = harden(
         Object.assign(
           {
-            import(mod) {
-              return import(mod);
+            async gatedUnsafeImport(mod) {
+              const { origin } = new URL(mod, import.meta.url);
+              assertPermission(
+                `unsafe import from ${origin}`,
+                details`Requested module ${mod}`,
+              );
+              return unsafeImport(mod);
             },
-          }.import,
+          }.gatedUnsafeImport,
           {
             meta: import.meta,
           },
         ),
       );
       const repl = document.getElementById('o-repl');
+      const unsafe = {
+        // eslint-disable-next-line no-undef
+        globalThis,
+      };
+      const gatedUnsafe = new Proxy(
+        harden({ gatedProperties: Object.keys(unsafe) }),
+        {
+          get(target, prop) {
+            if (prop in unsafe) {
+              assertPermission(
+                `access to UNSAFE power`,
+                details`Property name: unsafe.${prop}`,
+              );
+              return unsafe[prop];
+            }
+            return target[prop];
+          },
+        },
+      );
       repl.endowments = {
         O,
-        $imprt,
+        $imprt: gatedUnsafeImport,
+        unsafe: gatedUnsafe,
       };
 
       const just = x => inspect(x);

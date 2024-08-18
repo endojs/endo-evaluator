@@ -1,5 +1,5 @@
 /* eslint-disable no-console, no-new-func */
-/* globals globalThis Compartment */
+/* globals Compartment */
 
 // Obtuse, so that if we are loading under SES, we don't contain the syntax we
 // are trying to help our caller avoid.
@@ -135,13 +135,9 @@ const makeCompartmentEvaluate = (options, asyncKeyword) => {
   };
 };
 
-export const strictCompartmentAsyncEvaluate = () =>
-  makeCompartmentEvaluate(undefined, 'async ');
-export const sloppyCompartmentAsyncEvaluate = () =>
-  makeCompartmentEvaluate({ sloppyGlobalsMode: true }, 'async ');
-export const unsafeSloppyCompartmentAsyncEvaluate = (
-  globalEndowments = globalThis,
-) =>
+export const strictCompartmentAsyncEvaluate = (globalEndowments = {}) =>
+  makeCompartmentEvaluate({ globalEndowments }, 'async ');
+export const sloppyCompartmentAsyncEvaluate = (globalEndowments = {}) =>
   makeCompartmentEvaluate(
     { globalEndowments, sloppyGlobalsMode: true },
     'async ',
@@ -149,7 +145,7 @@ export const unsafeSloppyCompartmentAsyncEvaluate = (
 
 export const detectBestEvaluator = (...args) => {
   const prioritizedEvaluators = {
-    unsafeSloppyCompartmentAsyncEvaluate,
+    sloppyCompartmentAsyncEvaluate,
     unsafeSloppyAsyncEval,
   };
   for (const [name, evaluator] of Object.entries(prioritizedEvaluators)) {
