@@ -119,6 +119,9 @@ export const prepareOTools = (
         y[prop] = value;
         return value;
       }));
+  const hpReject =
+    (HandledPromise && (reason => HandledPromise.reject(reason))) ||
+    (reason => Promise.reject(reason));
 
   /**
    * @param {unknown} boundThis
@@ -141,7 +144,13 @@ export const prepareOTools = (
     const tgt = makeTarget(getThisArg, promiseMethodEntries);
 
     const cell = new Proxy(tgt, {
-      apply(_target, _thisArg, args) {
+      apply(_target, thisArg, args) {
+        if (thisArg !== parentCell) {
+          return makeBoundOCell(
+            hpReject(new TypeError(`Unexpected receiver ${thisArg}`)),
+          );
+        }
+
         if (boundName === undefined) {
           const retP = hpApplyFunction(boundThis, args);
           return makeBoundOCell(retP, cell);
@@ -157,14 +166,24 @@ export const prepareOTools = (
         hpDelete(getThisArg(), key).catch(sink);
         return Reflect.deleteProperty(target, key);
       },
-      set(target, key, value) {
+      set(target, key, value, receiver) {
+        if (receiver !== cell) {
+          hpReject(new TypeError(`Unexpected receiver ${receiver}`));
+          return false;
+        }
         if (promiseMethods.includes(key)) {
           return false;
         }
         hpSet(getThisArg(), key, value).catch(sink);
         return Reflect.set(target, key, value);
       },
-      get(_target, key) {
+      get(_target, key, receiver) {
+        if (receiver !== cell) {
+          return makeBoundOCell(
+            hpReject(new TypeError(`Unexpected receiver ${receiver}`)),
+          );
+        }
+
         if (promiseMethods.includes(key)) {
           // Base case, escape the cell via a promise method.
           return tgt[key];
