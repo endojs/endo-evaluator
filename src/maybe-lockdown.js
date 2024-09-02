@@ -1,8 +1,5 @@
 /* global globalThis */
 
-// Vetted shims.
-import './evaluators.js';
-
 const { freeze } = Object;
 
 // commit-debug.js - debug version of commit.js
@@ -27,6 +24,7 @@ const opts = {
   // this may be a development accident that should be fixed before merging.
   //
   errorTaming: 'unsafe',
+  errorTrapping: 'report',
 
   // The default `{stackFiltering: 'concise'}` setting usually makes for a
   // better debugging experience, by severely reducing the noisy distractions
@@ -83,7 +81,11 @@ const opts = {
   // domainTaming: 'unsafe',
 };
 
-if (globalThis.repairIntrinsics) {
+if (globalThis.process) {
+  opts.domainTaming = 'unsafe';
+}
+
+if (!globalThis.process?.env?.LOCKDOWN_DISABLE && globalThis.repairIntrinsics) {
   // Repair the SES-shim way.
   const hardenIntrinsics = globalThis.repairIntrinsics(opts);
 

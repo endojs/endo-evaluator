@@ -97,11 +97,9 @@
     </script>
 
     <script type="module">
-      // Hardened JS.
-      import '@endo/init/pre-remoting.js'; // Uncomment for Hardened JS.
-      // import './src/noses.js'; // Uncomment for no Hardened JS.
-      // eslint-disable-next-line import/order
+      import './src/pre-lockdown.js'; // Uncomment for Hardened JS.
       import { harden } from './src/maybe-lockdown.js';
+      // eslint-disable-next-line import/order, import/no-unresolved
       import { prepareOTools } from '@endo/o';
       import './src/endo-evaluator.js';
       import inspect from './src/object-inspect.js';

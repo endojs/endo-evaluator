@@ -13,14 +13,14 @@
     "start:build": "web-dev-server --root-dir dist --app-index index.html --open",
     "analyze": "cem analyze --litelement",
     "start": "web-dev-server",
-    "dev": "node -r ./o.cjs"
+    "dev": "node --import=./o.js"
   },
   "dependencies": {
-    "@endo/init": "^1.1.2",
-    "@endo/marshal": "^1.5.0",
+    "@endo/init": "^1.1.4",
+    "@endo/marshal": "^1.5.3",
     "@open-wc/dev-server-hmr": "^0.2.0",
     "lit": "^3.1.4",
-    "ses": "^1.5.0"
+    "ses": "^1.8.0"
   },
   "devDependencies": {
     "@custom-elements-manifest/analyzer": "^0.10.3",
