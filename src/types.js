@@ -19,9 +19,9 @@ export {};
 
 /**
  * @template [R=never]
- * @callback CommitFailure
- * @param {[TemplateStringsArray, ...any[]]} tagCall
+ * @callback ReturnFailure
  * @param {(s: string, ...args: any[]) => any} maker
- * @param {...any[]} restArgs
+ * @param {[TemplateStringsArray, ...any[]]} tagCall
+ * @param {...any} restArgs
  * @returns {R}
  */

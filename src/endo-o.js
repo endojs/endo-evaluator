@@ -1,9 +1,8 @@
 /* global globalThis */
 /* eslint-disable max-classes-per-file, no-param-reassign, no-void */
 
-/**
- * @import { FailWithDefault, FailWithGeneral, CommitFailure } from './types.js';
- */
+import { prepareEventualTools } from './eventual.js';
+import { prepareFailureTools } from './failure.js';
 
 /**
  * @template T,U
@@ -41,7 +40,7 @@
 /**
  * @type {<T>(x: T) => T}
  */
-const harden = globalThis.harden || (x => x);
+const harden = globalThis.harden || Object.freeze;
 
 const sink = harden(() => {});
 
@@ -74,29 +73,6 @@ const makeTarget = (getThisArg, shadowMethodEntries) => {
 };
 
 /**
- * @template [R=never]
- * @param {CommitFailure<R>} commitFailure
- * @returns {FailWithGeneral<R>}
- */
-export const makeFailWith = commitFailure => {
-  /**
-   * @type {FailWithGeneral<R>}
-   */
-  const failWith = (tsaOrMaker, ...restArgs) => {
-    if (typeof tsaOrMaker === 'function') {
-      // Explicit maker, and arguments are intended for it.
-      /** @type {FailWithDefault<R>} */
-      return (tsa, ...deets) =>
-        commitFailure(tsaOrMaker, [tsa, ...deets], ...restArgs);
-    }
-    return commitFailure(Error, [tsaOrMaker, ...restArgs]);
-  };
-
-  return failWith;
-};
-harden(makeFailWith);
-
-/**
  * @param {unknown} _zone TODO: use zones.
  * @param {object} [powers]
  * @param {{
@@ -119,10 +95,7 @@ export const prepareOTools = (
       p.catch(sink);
       return p;
     },
-    assert: {
-      error: assertError,
-      details: assertDetails,
-    } = globalThis.assert || {},
+    assert = globalThis.assert,
     HandledPromise = globalThis.HandledPromise,
   } = powers || {};
 
@@ -132,43 +105,24 @@ export const prepareOTools = (
   ]);
   const promiseMethodNames = new Set(promiseMethods);
 
-  const useHandledPromise = prop => HandledPromise && HandledPromise[prop];
-  const hpGet =
-    useHandledPromise('get') || ((x, prop) => when(x).then(y => y[prop]));
-  const hpApplyFunction =
-    useHandledPromise('applyFunction') ||
-    ((x, args) => when(x).then(y => y(...args)));
-  const hpApplyMethod =
-    useHandledPromise('applyMethod') ||
-    ((x, prop, args) => when(x).then(y => y[prop](...args)));
-  const hpDelete =
-    useHandledPromise('delete') ||
-    ((x, prop) => when(x).then(y => delete y[prop]));
-  const hpSet =
-    useHandledPromise('set') ||
-    ((x, prop, value) =>
-      when(x).then(y => {
-        y[prop] = value;
-        return value;
-      }));
-  const hpReject =
-    (HandledPromise && (reason => HandledPromise.reject(reason))) ||
-    (reason => Promise.reject(reason));
+  const { throwWith, makeFailWith, createError } = prepareFailureTools(_zone, {
+    assert,
+    reject: HandledPromise
+      ? HandledPromise.reject.bind(HandledPromise)
+      : undefined,
+  });
+  const {
+    Promise: { eventual },
+    EventualFactory,
+  } = prepareEventualTools(_zone, { HandledPromise, throwWith, when });
 
-  const errorWithDetails =
-    (assertError &&
-      assertDetails &&
-      ((Error, [tsa, ...deets], ...rest) =>
-        assertError(assertDetails(tsa, ...deets), Error, ...rest))) ||
-    ((Error, [tsa, ...deets], ...rest) =>
-      Error(String.raw({ raw: tsa }, ...deets), ...rest));
-
-  /** @type {CommitFailure<Promise<never>>} */
-  const commitHpReject = (maker, tagCall, ...restArgs) => {
-    const err = errorWithDetails(maker, tagCall, ...restArgs);
-    return /** @type {Promise<never>} */ (hpReject(err));
+  /** @type {ReturnFailure<Promise<never>>} */
+  const commitReject = (maker, tagCall, ...restArgs) => {
+    const err = createError(maker, tagCall, ...restArgs);
+    return /** @type {Promise<never>} */ (eventual.reject(err));
   };
-  const hpRejectWith = makeFailWith(commitHpReject);
+  /** @type {FailWithGeneral<Promise<never>>} */
+  const rejectWith = makeFailWith(commitReject);
 
   /**
    * @param {unknown} boundThis
@@ -182,7 +136,7 @@ export const prepareOTools = (
         if (boundName === undefined) {
           cachedThisArg = when(boundThis);
         } else {
-          cachedThisArg = when(hpGet(boundThis, boundName));
+          cachedThisArg = when(eventual.get(boundThis, boundName));
         }
       }
       return cachedThisArg;
@@ -190,32 +144,34 @@ export const prepareOTools = (
 
     const tgt = makeTarget(getThisArg, promiseMethodEntries);
 
-    const cell = new Proxy(tgt, {
+    // Reflect the eventual handler onto `getThisArg()`.
+    const evFactory = EventualFactory.delegateLazy(getThisArg);
+    const cell = evFactory.newProxy(tgt, {
       apply(_target, thisArg, args) {
         if (thisArg !== parentCell) {
           return makeBoundOCell(
-            hpRejectWith(TypeError)`Unexpected thisArg ${thisArg}`,
+            rejectWith(TypeError)`Unexpected thisArg ${thisArg}`,
           );
         }
 
         if (boundName === undefined) {
-          const retP = hpApplyFunction(boundThis, args);
+          const retP = eventual.apply(boundThis, args);
           return makeBoundOCell(retP, cell);
         }
 
-        const retP = hpApplyMethod(boundThis, boundName, args);
+        const retP = eventual.send(boundThis, boundName, args);
         return makeBoundOCell(retP, cell);
       },
       deleteProperty(target, key) {
         if (promiseMethodNames.has(key)) {
           return false;
         }
-        hpDelete(getThisArg(), key).catch(sink);
+        eventual.delete(getThisArg(), key).catch(sink);
         return Reflect.deleteProperty(target, key);
       },
       set(target, key, value, receiver) {
         if (receiver !== cell) {
-          void hpRejectWith(
+          void rejectWith(
             TypeError,
           )`Unexpected receiver ${receiver} for set ${key}`;
           return false;
@@ -223,13 +179,13 @@ export const prepareOTools = (
         if (promiseMethodNames.has(key)) {
           return false;
         }
-        hpSet(getThisArg(), key, value).catch(sink);
+        eventual.set(getThisArg(), key, value).catch(sink);
         return Reflect.set(target, key, value);
       },
       get(_target, key, receiver) {
         if (receiver !== cell) {
           return makeBoundOCell(
-            hpRejectWith(
+            rejectWith(
               TypeError,
             )`Unexpected receiver ${receiver} for get ${key}`,
           );
@@ -263,16 +219,17 @@ export const prepareOTools = (
 
   /**
    * @template T
-   * @param {T} obj
+   * @param {T} [obj]
    * @returns {Promise<Awaited<T>> & AsyncPrimitive<T> & AsyncShallow<T> & {
    * <U>(x: U): OCell<U> }}
    */
-  const makeO = obj => {
+  const makeO = (obj = {}) => {
     const identity = x => x;
     const root = Object.assign(identity, obj);
     return makeOCell(root);
   };
 
-  return harden({ makeOCell, makeO });
+  eventual.client = harden(makeO());
+  return harden({ EventualFactory, eventual, makeOCell, makeO });
 };
 harden(prepareOTools);
