@@ -53,7 +53,7 @@ harden(DEFAULT_PROMISE_METHODS);
  * @returns {T}
  */
 export const stripFunction = target => {
-  Object.setPrototypeOf(target, harden({ [Symbol.toStringTag]: 'OCell' }));
+  Object.setPrototypeOf(target, { [Symbol.toStringTag]: 'OCell' });
   for (const key of Reflect.ownKeys(target)) {
     delete target[key];
   }
@@ -73,7 +73,7 @@ const makeTarget = (getThisArg, shadowMethodEntries) => {
 };
 
 /**
- * @param {unknown} _zone TODO: use zones.
+ * @param {unknown} zone TODO: use zones.
  * @param {object} [powers]
  * @param {{
  *   applyFunction: (x: unknown, args: any[]) => Promise<unknown>
@@ -85,7 +85,7 @@ const makeTarget = (getThisArg, shadowMethodEntries) => {
  * @param {string[]} [opts.promiseMethods]
  */
 export const prepareOTools = (
-  _zone,
+  zone,
   powers,
   { promiseMethods = DEFAULT_PROMISE_METHODS } = {},
 ) => {
@@ -105,16 +105,23 @@ export const prepareOTools = (
   ]);
   const promiseMethodNames = new Set(promiseMethods);
 
-  const { throwWith, makeFailWith, createError } = prepareFailureTools(_zone, {
-    assert,
-    reject: HandledPromise
-      ? HandledPromise.reject.bind(HandledPromise)
-      : undefined,
-  });
+  const { throwWith, makeFailWith, createError } = prepareFailureTools(
+    zone.subZone('failure'),
+    {
+      assert,
+      reject: HandledPromise
+        ? HandledPromise.reject.bind(HandledPromise)
+        : undefined,
+    },
+  );
   const {
     Promise: { eventual },
     EventualFactory,
-  } = prepareEventualTools(_zone, { HandledPromise, throwWith, when });
+  } = prepareEventualTools(zone.subZone('eventual'), {
+    HandledPromise,
+    throwWith,
+    when,
+  });
 
   /** @type {ReturnFailure<Promise<never>>} */
   const commitReject = (maker, tagCall, ...restArgs) => {
@@ -148,7 +155,7 @@ export const prepareOTools = (
     const evFactory = EventualFactory.delegateLazy(getThisArg);
     const cell = evFactory.newProxy(tgt, {
       apply(_target, thisArg, args) {
-        if (thisArg !== parentCell) {
+        if (thisArg !== undefined && thisArg !== parentCell) {
           return makeBoundOCell(
             rejectWith(TypeError)`Unexpected thisArg ${thisArg}`,
           );
@@ -195,7 +202,7 @@ export const prepareOTools = (
           return tgt[key];
         }
         if (key === Symbol.toPrimitive) {
-          // Work around a bug that somehow freezes the Node.js REPL.
+          // Work around a bug that somehow locks up the Node.js REPL.
           return undefined;
         }
         const thisArg = getThisArg();

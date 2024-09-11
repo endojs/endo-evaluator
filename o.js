@@ -3,9 +3,10 @@
 
 import './src/pre-lockdown.js';
 import './src/maybe-lockdown.js';
+import { makeHeapZone } from '@agoric/base-zone/heap.js';
 import { prepareOTools } from './src/endo-o.js';
 
-const { makeO } = prepareOTools(null);
+const { makeO } = prepareOTools(makeHeapZone());
 
 const O = makeO({
   help: 'This is a help message',

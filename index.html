@@ -98,9 +98,11 @@
 
     <script type="module">
       import './src/pre-lockdown.js'; // Uncomment for Hardened JS.
+      // eslint-disable-next-line import/order
       import { harden } from './src/maybe-lockdown.js';
-      // eslint-disable-next-line import/order, import/no-unresolved
+      // eslint-disable-next-line import/no-unresolved
       import { prepareOTools } from '@endo/o';
+      import { makeHeapZone } from '@agoric/base-zone/heap.js';
       import './src/endo-evaluator.js';
       import inspect from './src/object-inspect.js';
 
@@ -130,7 +132,7 @@ Are you sure you want to proceed?`,
       const help = `O.noes! We don't have any better help than this right now.`;
       const noes = Promise.reject(Error('O NOES!!!'));
       noes.catch(() => {});
-      const { makeO } = prepareOTools(null);
+      const { makeO } = prepareOTools(makeHeapZone());
       const O = makeO({
         help,
         noes,

@@ -5,19 +5,30 @@
  * @import { HandledPromiseConstructor } from '@endo/eventual-send';
  */
 
+const {
+  defineProperties,
+  entries,
+  freeze,
+  fromEntries,
+  getOwnPropertyDescriptors,
+  getPrototypeOf,
+  setPrototypeOf,
+} = Object;
+
 /**
  * @type {<T>(x: T) => T}
  */
-const harden = globalThis.harden || Object.freeze;
+const harden = globalThis.harden || freeze;
 
 /**
  *
  * @param {object} _zone
  * @param {object} powers
  * @param {HandledPromiseConstructor} powers.HandledPromise
+ * @param {(resolution: any) => unknown} powers.makeStep
  * @param {(specimen: unknown) => Promise<any>} powers.when
  */
-const preparePromiseEventual = (_zone, { HandledPromise, when }) => {
+const preparePromiseEventual = (_zone, { HandledPromise, makeStep, when }) => {
   /**
    * @template {keyof HandledPromiseConstructor} K
    * @template {(...args: any[]) => any} [F=HandledPromiseConstructor[K]]
@@ -69,6 +80,7 @@ const preparePromiseEventual = (_zone, { HandledPromise, when }) => {
     ),
     reject: bindProp('reject', reason => Promise.reject(reason)),
     resolve: bindProp('resolve', result => Promise.resolve(result)),
+    makeStep: bindProp('makeStep', result => makeStep(result)),
   };
   return eventual;
 };
@@ -134,8 +146,8 @@ const prepareEventualFactory = (
     }
 
     constructor(evHandler) {
-      this.#hpHandler = Object.fromEntries(
-        Object.entries(evHandler).map(([k, v]) => {
+      this.#hpHandler = fromEntries(
+        entries(evHandler).map(([k, v]) => {
           let hpProp;
           switch (k) {
             case 'apply':
@@ -175,12 +187,28 @@ const prepareEventualFactory = (
       let obj;
       new HandledPromise((_res, _rej, resolveWithPresence) => {
         obj = resolveWithPresence(this.#hpHandler);
-        Object.setPrototypeOf(obj, proto);
+        setPrototypeOf(obj, proto);
         if (props) {
-          Object.defineProperties(obj, props);
+          defineProperties(obj, props);
         }
       });
-      return harden(obj);
+      return obj;
+    }
+
+    /**
+     * @template T
+     * @param {T} resolution
+     * @returns {unknown}
+     */
+    makeStep(resolution) {
+      let step;
+      const rawStep = eventual.makeStep(resolution);
+      new HandledPromise((_res, _rej, resolveWithPresence) => {
+        step = resolveWithPresence(this.#hpHandler);
+        setPrototypeOf(step, getPrototypeOf(rawStep));
+        defineProperties(step, getOwnPropertyDescriptors(rawStep));
+      });
+      return step;
     }
 
     /**
@@ -237,15 +265,20 @@ const prepareEventualFactory = (
   return EventualFactory;
 };
 
+/**
+ * @param {import('@agoric/base-zone').Zone} zone
+ * @param {*} param1
+ */
 export const prepareEventualTools = (
-  _zone,
-  { HandledPromise, throwWith, when },
+  zone,
+  { HandledPromise, throwWith, makeStep, when },
 ) => {
-  const eventual = preparePromiseEventual(_zone, {
+  const eventual = preparePromiseEventual(zone, {
     HandledPromise,
+    makeStep,
     when,
   });
-  const EventualFactory = prepareEventualFactory(_zone, {
+  const EventualFactory = prepareEventualFactory(zone, {
     HandledPromise,
     throwWith,
     when,
