@@ -1,0 +1,42 @@
+diff --git a/src/handled-promise.js b/src/handled-promise.js
+index 17785b3529a1277e3d3543550ab9c73f0803a1c7..516ef37999d9906a73057e20df8a2cd4bdaad266 100644
+--- a/src/handled-promise.js
++++ b/src/handled-promise.js
+@@ -257,7 +257,6 @@ export const makeHandledPromise = () => {
+         if (resolved) {
+           return;
+         }
+-        harden(reason);
+         assertNotYetForwarded();
+         promiseToPendingHandler.delete(handledP);
+         resolved = true;
+@@ -483,8 +482,6 @@ export const makeHandledPromise = () => {
+   };
+ 
+   handle = (...handleArgs) => {
+-    // We're in SES mode, so we should harden.
+-    harden(handleArgs);
+     const [_p, operation, opArgs, ...dispatchArgs] = handleArgs;
+     let [p] = handleArgs;
+     const doDispatch = (handlerName, handler, o) =>
+@@ -508,9 +505,9 @@ export const makeHandledPromise = () => {
+           return;
+         }
+         try {
+-          resolve(harden(trackedDoDispatch(handlerName, handler, o)));
++          resolve(trackedDoDispatch(handlerName, handler, o));
+         } catch (reason) {
+-          reject(harden(reason));
++          reject(reason);
+         }
+         raceIsOver = true;
+       };
+@@ -520,7 +517,7 @@ export const makeHandledPromise = () => {
+         if (raceIsOver) {
+           return;
+         }
+-        reject(harden(reason));
++        reject(reason);
+         raceIsOver = true;
+       };
+ 

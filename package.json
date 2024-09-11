@@ -47,7 +47,9 @@
     "rollup-plugin-workbox": "^8.1.0"
   },
   "resolutions": {
-    "strip-ansi": "6.0.1"
+    "strip-ansi": "6.0.1",
+    "@endo/eventual-send@npm:^1.2.5": "patch:@endo/eventual-send@npm%3A1.2.5#~/.yarn/patches/@endo-eventual-send-npm-1.2.5-f058f2db04.patch",
+    "@endo/eventual-send@npm:^1.2.2": "patch:@endo/eventual-send@npm%3A1.2.5#~/.yarn/patches/@endo-eventual-send-npm-1.2.5-f058f2db04.patch"
   },
   "eslintConfig": {
     "root": true,
@@ -70,5 +72,6 @@
       "prettier --write"
     ]
   },
+  "packageManager": "yarn@4.4.1",
   "customElements": "custom-elements.json"
 }
