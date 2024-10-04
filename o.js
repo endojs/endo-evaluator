@@ -6,7 +6,8 @@ import './src/maybe-lockdown.js';
 import { makeHeapZone } from '@agoric/base-zone/heap.js';
 import { prepareOTools } from './src/endo-o.js';
 
-const { makeO } = prepareOTools(makeHeapZone());
+const oZone = makeHeapZone();
+const { makeO } = prepareOTools(oZone);
 
 const O = makeO({
   help: 'This is a help message',
